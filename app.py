@@ -1,23 +1,14 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-
-# pip intsall -r ladda ner alla pip
-# Skapa en  CRUD-applikation för Employee (med MENY)
-
-# Man ska ha namn, ålder, anställningsdatum
-
-# Man ska kunna SÖKA på  namn
-
-# Man ska kunna uppdatera alla värden
-
-# Man ska kunna skapa ny
+from flask_migrate import Migrate, upgrade
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root:hejhej321?@localhost/HotelBooking'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://user:password@host/database_name'
 db = SQLAlchemy(app)
+migrate = Migrate(app,db)
+migrate.init_app(app, db)
 
-#det vi gör är codefirst
 class Customer(db.Model):
     customerID = db.Column(db.Integer, primary_key=True)
     fullName = db.Column(db.String(30), unique=False, nullable=False)
@@ -44,42 +35,188 @@ class Reservation(db.Model):
     arrivalDate = db.Column(db.Date,unique=False, nullable=False)
     departureDate = db.Column(db.Date,unique=False, nullable=False)
     bookDate = db.Column(db.Date,unique=False, nullable=False)
+    faktura_ID = db.Column(db.Integer,db.ForeignKey('invoice.fakturaID'),nullable=False)
 class Invoice(db.Model):
     fakturaID = db.Column(db.Integer, primary_key=True)
     customer_ID = db.Column(db.Integer,db.ForeignKey('customer.customerID'), nullable=False)
     startDate = db.Column(db.Date,unique=False, nullable=False)
     endDate = db.Column(db.Date,unique=False, nullable=False)
     invoicePaid = db.Column(db.Boolean,unique=False, nullable=False)
+    reservation = db.relationship('Reservation',backref='invoice',lazy=True)
+
+def Felhantering(prompt,minValue:int, maxValue:int)->int:
+    while True:
+        try:
+            selection = int(input(prompt))
+            if selection < minValue or selection > maxValue:
+                 print(f"Mata in ett tal mellan {minValue} och {maxValue} tack")
+            else:
+                 break
+        except ValueError:
+             print(f"Mata in ett tal mellan {minValue} och {maxValue} tack")
+             continue
+    return selection
 
 def RegisterCustomer():
     c = Customer()
-    c.fullName = input("Ange för och efternamn:")
+    c.fullName = input("Ange för och efternamn:").upper()
     c.email = input("Ange mail:")
     c.phoneNumber = input("Ange telefon nummer:")
-    c.adress = input("Ange adree:")
+    c.adress = input("Ange adress:")
     c.postalCode = input("Ange postnummer:")
     c.city = input("Ange postort:")
     db.session.add(c)
     db.session.commit()
 
-def BookRoom():
-    roomType1 = input("Ange Enkelrum eller Dubbelrum")
-    roomsTypes = Hotelroom.query.filter(Hotelroom.roomType.contains(roomType1)).all()
-    choices = [(roomsTypes.roomID,roomsTypes.roomType) for roomsTypes in roomsTypes]
-    for choice in choices:
-        print(choice)
-
-
-with app.app_context():
-    db.create_all()
+def checkAvailableRoom(roomsTypes,startDate,endDate,occupiedRooms):
+    for room in roomsTypes:
+        checkReservation = Reservation.query.filter(Reservation.room_ID.contains(room.roomID)).all()
+        for reservation in checkReservation:
+            if startDate >= reservation.arrivalDate >= endDate or startDate <= reservation.departureDate <= endDate:
+                print(f"Rum:{reservation.room_ID} Rumstyp:{room.roomType} Upptaget")
+                occupiedRooms.append(reservation.room_ID)
+            else:
+                print(f"Rum:{reservation.room_ID} Rumstyp:{room.roomType} Ledigt")
+                occupiedRooms.append(reservation.room_ID)
+    for room in roomsTypes:
+        if room.roomID in occupiedRooms:
+            continue
+        print(f"Rum:{room.roomID} Rumstyp:{room.roomType} Ledigt")
+def BookRoom(reservationDateStart,reservationDateStop):
+    while True:
+        occupiedRooms = []
+        roomType = input("Ange Enkelrum eller Dubbelrum")
+        reservationDatesStart = input("Startdatum")
+        reservationDatesStop = input("Slutdatum")
+        startDate = datetime.strptime(reservationDatesStart,"%Y-%m-%d").date()
+        endDate = datetime.strptime(reservationDatesStop,"%Y-%m-%d").date()
+        roomsTypes = Hotelroom.query.filter(Hotelroom.roomType.contains(roomType)).all()
+        checkAvailableRoom(roomsTypes,startDate,endDate,occupiedRooms)
+        roomChoice = int(input("Mata in rumms nummer för rummet som ska bokas"))
+        checkReservation2 = Reservation.query.filter(Reservation.room_ID.contains(roomChoice)).all()
+        for rooms in checkReservation2:
+            if roomChoice == rooms.room_ID:
+                print("Rummet upptaget försök igen")
+                break
+        extraBedYesOrNO = input("Vill kunden lägga till extrasäng? mata in Ja/Nej").lower()
+        extraBed = 0
+        extraBedBool = 0
+        if extraBedYesOrNO == "ja":
+            extraBedBool = 1
+            if roomType == "Enkelrum":
+                extraBed = 1
+            extraBed = 2
+        r=Reservation()
+        r.room_ID = roomChoice
+        r.customer_ID = input("Skriv in kund id:")
+        r.arrivalDate = reservationDateStart
+        r.departureDate = reservationDateStop
+        r.bookDate = datetime.now().date()
+        r.extraBed = extraBedBool
+        r.extraBedOneOrTwo = extraBed
+        db.session.add(r)
+        db.session.commit()
+        print("Rummet bokat")
+        return
+def cancelReservation():
+    while True:
+        customerName = input("Ange fullständigt namn på kunden").upper()
+        checkCustomer = Customer.query.filter(Customer.fullName.contains(customerName)).all()
+        for customer in checkCustomer:
+            for resertvation in Reservation.query.all():
+                if customer.customerID == resertvation.customer_ID:
+                    print(f"Reservation:{resertvation.reservationID} Arrivaldate:{resertvation.arrivalDate} Departuredate:{resertvation.departureDate} ")
+                else: 
+                    print("Fanns inga bokningar på det namnet")
+                    break
+        chooseReservation = int(input("Ange reservations nummer för bokning som ska hanteras"))
+        deleteOrCustomize = input("Vill du radera bokning eller ändra på bokning").lower()
+        if deleteOrCustomize == "radera":
+            if resertvation.reservationID == chooseReservation:
+                deleteReservation(chooseReservation)
+            else:
+                print("Fel reservationsnummer angivet")
+                break
+        elif deleteOrCustomize == "ändra":
+            if resertvation.reservationID == chooseReservation:
+                customizeReservation(chooseReservation)
+        break
+    return
+def deleteReservation(chooseReservation):
+    reservation = Reservation.query.filter(Reservation.reservationID == chooseReservation).one()
+    db.session.delete(reservation)
+    db.session.commit()
+    print("Raderat bokning")
+    return
+def customizeReservation(chooseReservation):
+    while True:
+        print(f"Tryck\n1: För att ändra datum\n2: Ändra extra sängar")
+        action = Felhantering((":"),minValue=1, maxValue=2)
+        if action == 1:
+            reservationDatesStart = input("Startdatum")
+            reservationDatesStop = input("Slutdatum")
+            startDate = datetime.strptime(reservationDatesStart,"%Y-%m-%d").date()
+            endDate = datetime.strptime(reservationDatesStop,"%Y-%m-%d").date()
+            checkReservation3 = Reservation.query.filter(Reservation.room_ID.contains(chooseReservation)).all()
+            for reservation in checkReservation3:
+                checkReservationDates = Reservation.query.filter(Reservation.room_ID.contains(reservation.room_ID)).all()
+                for rooms in checkReservationDates:
+                    if reservation.room_ID != rooms.room_ID:
+                        if startDate >= rooms.arrivalDate >= endDate or startDate <= rooms.departureDate <= endDate:
+                            print("Upptaget testa annat datum")
+                            break
+                    res = Reservation.query.filter_by(room_ID=reservation.room_ID).first()
+                    res.arrivalDate = reservationDatesStart
+                    res.departureDate = reservationDatesStop
+                    db.session.commit()
+                    print("Ändrat")
+                    return
+        elif action == 2:
+            manageExtraBeds(chooseReservation)
+            return
+def manageExtraBeds(chooseReservation):
+    checkExtraBed = Reservation.query.filter(Reservation.reservationID.contains(chooseReservation)).all()
+    for rooms in checkExtraBed:
+        howManyExtraBeds = Hotelroom.query.filter(Hotelroom.roomID.contains(rooms.room_ID)).all()
+        for room in howManyExtraBeds:
+            print(f"Bokningen har {rooms.extraBedOneOrTwo} registrerade extra sängar. Bokningen kan ha {room.extraBedAvailability}")
+            print("Mata in antal extra sängar du vill ha")
+            action = Felhantering((":"),minValue=0, maxValue=room.extraBedAvailability)
+            res = Reservation.query.filter_by(room_ID=rooms.room_ID).first()
+            res.extraBedOneOrTwo = action
+            db.session.commit()
+            print("Ändrat")
+            return
+def invoice():
+    pass
+if __name__ == "__main__":
+    with app.app_context():
+        upgrade()
+# with app.app_context():
+#     db.create_all()
     while True:
         print(f"1.Registrera kund\n2.Boka rum\n3.Avboka/Ändra bokning\n4.Faktura hantering\n5.Logga ut")
         menuAction = int(input())
         if menuAction==1:
             RegisterCustomer()
         elif menuAction==2:
-            BookRoom()
+            BookRoom(reservationDateStart=0,reservationDateStop=0)
         elif menuAction==3:
+            cancelReservation()
+        elif menuAction==4:
+            invoice()
+        elif menuAction ==5:
+            r=Reservation()
+            r.customer_ID = input("ID")
+            r.room_ID = input("rumNr")
+            r.extraBed = int(input("0 eller 1"))
+            r.extraBedOneOrTwo = input("1 eller 2")
+            r.arrivalDate = input("arrival date")
+            r.departureDate = input("departure date")
+            r.bookDate = input("bookdatum")
+            db.session.add(r)
+            db.session.commit()
+        elif menuAction == 6:
             c = Hotelroom()
             c.roomNumber = int(input("rumsnr"))
             c.roomType = input("rumtyp")
@@ -87,6 +224,7 @@ with app.app_context():
             c.maxPersonsInRoom = input("Antala i rummet")
             db.session.add(c)
             db.session.commit()
+            
         
         elif menuAction == 5:
             break
