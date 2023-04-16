@@ -4,7 +4,7 @@ from datetime import datetime
 from flask_migrate import Migrate, upgrade
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://user:password@host/database_name'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://user:password@host/database'
 db = SQLAlchemy(app)
 migrate = Migrate(app,db)
 migrate.init_app(app, db)
@@ -187,44 +187,26 @@ def manageExtraBeds(chooseReservation):
             db.session.commit()
             print("Ändrat")
             return
-def invoice():
-    pass
 if __name__ == "__main__":
     with app.app_context():
         upgrade()
-# with app.app_context():
-#     db.create_all()
     while True:
-        print(f"1.Registrera kund\n2.Boka rum\n3.Avboka/Ändra bokning\n4.Faktura hantering\n5.Logga ut")
-        menuAction = int(input())
-        if menuAction==1:
-            RegisterCustomer()
-        elif menuAction==2:
-            BookRoom(reservationDateStart=0,reservationDateStop=0)
-        elif menuAction==3:
-            cancelReservation()
-        elif menuAction==4:
-            invoice()
-        elif menuAction ==5:
-            r=Reservation()
-            r.customer_ID = input("ID")
-            r.room_ID = input("rumNr")
-            r.extraBed = int(input("0 eller 1"))
-            r.extraBedOneOrTwo = input("1 eller 2")
-            r.arrivalDate = input("arrival date")
-            r.departureDate = input("departure date")
-            r.bookDate = input("bookdatum")
-            db.session.add(r)
-            db.session.commit()
-        elif menuAction == 6:
-            c = Hotelroom()
-            c.roomNumber = int(input("rumsnr"))
-            c.roomType = input("rumtyp")
-            c.extraBedAvailability = int(input("0 eller 1"))
-            c.maxPersonsInRoom = input("Antala i rummet")
-            db.session.add(c)
-            db.session.commit()
-            
-        
-        elif menuAction == 5:
-            break
+        with app.app_context():
+            print(f"1.Registrera kund\n2.Boka rum\n3.Avboka/Ändra bokning\n4.Add hotelroom\n5.Logga ut")
+            menuAction = int(input())
+            if menuAction==1:
+                RegisterCustomer()
+            elif menuAction==2:
+                BookRoom(reservationDateStart=0,reservationDateStop=0)
+            elif menuAction==3:
+                cancelReservation()
+            elif menuAction == 4:
+                c = Hotelroom()
+                c.roomNumber = int(input("rumsnr"))
+                c.roomType = input("rumtyp")
+                c.extraBedAvailability = int(input("0 eller 1"))
+                c.maxPersonsInRoom = input("Antala i rummet")
+                db.session.add(c)
+                db.session.commit()
+            elif menuAction == 5:
+                break
